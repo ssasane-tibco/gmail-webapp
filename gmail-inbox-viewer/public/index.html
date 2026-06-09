@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gmail Inbox Viewer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1a73e8;
+      color: #fff;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: .02em; }
+    header .badge {
+      background: rgba(255,255,255,.25);
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: .75rem;
+    }
+    header .spacer { flex: 1; }
+    header button {
+      background: rgba(255,255,255,.2);
+      border: 1px solid rgba(255,255,255,.4);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .85rem;
+      transition: background .15s;
+    }
+    header button:hover { background: rgba(255,255,255,.35); }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e0;
+      padding: 10px 16px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .filter-bar label { font-size: .8rem; color: #555; white-space: nowrap; }
+    .filter-bar input, .filter-bar select {
+      border: 1px solid #d0d0d0;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: .85rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .filter-bar input:focus, .filter-bar select:focus { border-color: #1a73e8; }
+    .filter-bar input.wide { min-width: 280px; flex: 1; }
+    .filter-bar button {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 16px;
+      cursor: pointer;
+      font-size: .85rem;
+      transition: background .15s;
+    }
+    .filter-bar button:hover { background: #1558b0; }
+    .filter-bar button.secondary {
+      background: #fff;
+      color: #1a73e8;
+      border: 1px solid #1a73e8;
+    }
+    .filter-bar button.secondary:hover { background: #e8f0fe; }
+
+    /* ── Main split ── */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Email list ── */
+    .email-list-panel {
+      width: 380px;
+      min-width: 280px;
+      border-right: 1px solid #e0e0e0;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .email-list-header {
+      padding: 10px 14px;
+      font-size: .75rem;
+      color: #666;
+      border-bottom: 1px solid #f0f0f0;
+      background: #fafafa;
+    }
+    .email-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .email-item {
+      padding: 12px 14px;
+      border-bottom: 1px solid #f2f2f2;
+      cursor: pointer;
+      transition: background .1s;
+      position: relative;
+    }
+    .email-item:hover { background: #f5f8ff; }
+    .email-item.active { background: #e8f0fe; border-left: 3px solid #1a73e8; }
+    .email-item.unread .email-subject { font-weight: 700; }
+    .unread-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #1a73e8;
+      margin-right: 6px;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
+    .email-subject {
+      font-size: .875rem;
+      color: #1a1a2e;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: flex;
+      align-items: center;
+    }
+    .email-from {
+      font-size: .75rem;
+      color: #555;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .email-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .email-to-tag {
+      font-size: .7rem;
+      background: #e8f0fe;
+      color: #1a73e8;
+      border-radius: 10px;
+      padding: 1px 7px;
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .email-date {
+      font-size: .7rem;
+      color: #999;
+      white-space: nowrap;
+    }
+    .email-snippet {
+      font-size: .75rem;
+      color: #888;
+      margin-top: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Email detail ── */
+    .email-detail-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #fff;
+    }
+    .email-detail-header {
+      padding: 16px 20px 12px;
+      border-bottom: 1px solid #e8e8e8;
+      flex-shrink: 0;
+    }
+    .email-detail-subject {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #1a1a2e;
+      margin-bottom: 10px;
+    }
+    .email-detail-meta {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 10px;
+      font-size: .8rem;
+    }
+    .email-detail-meta .label { color: #888; text-align: right; }
+    .email-detail-meta .value { color: #333; }
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .detail-actions button {
+      border: 1px solid #d0d0d0;
+      background: #fff;
+      border-radius: 6px;
+      padding: 5px 14px;
+      cursor: pointer;
+      font-size: .8rem;
+      color: #555;
+      transition: background .15s;
+    }
+    .detail-actions button:hover { background: #f5f5f5; }
+
+    .email-body-frame {
+      flex: 1;
+      border: none;
+      padding: 0;
+      margin: 0;
+      background: #fff;
+    }
+
+    /* ── Empty / loading states ── */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #aaa;
+      gap: 10px;
+      font-size: .9rem;
+    }
+    .empty-state svg { opacity: .35; }
+
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid #e0e0e0;
+      border-top-color: #1a73e8;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast {
+      position: fixed;
+      bottom: 20px; right: 20px;
+      background: #323232;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: .85rem;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="white">
+    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+  </svg>
+  <h1>Gmail Inbox Viewer</h1>
+  <span class="badge" id="totalBadge">—</span>
+  <div class="spacer"></div>
+  <button onclick="loadEmails()">Refresh</button>
+</header>
+
+<div class="filter-bar">
+  <label>To:</label>
+  <input type="text" id="filterTo" class="wide" placeholder="e.g. tscqeuser+platform+automation@gmail.com" />
+  <label>Filter:</label>
+  <select id="filterRead">
+    <option value="">All</option>
+    <option value="is:unread">Unread only</option>
+    <option value="is:read">Read only</option>
+  </select>
+  <label>Subject:</label>
+  <input type="text" id="filterSubject" placeholder="keyword" style="width:140px" />
+  <label>Max:</label>
+  <select id="maxResults">
+    <option value="20">20</option>
+    <option value="30">30</option>
+    <option value="50" selected>50</option>
+    <option value="100">100</option>
+    <option value="500">All (500)</option>
+  </select>
+  <button onclick="loadEmails()">Search</button>
+  <button class="secondary" onclick="clearFilters()">Clear</button>
+</div>
+
+<div class="main">
+  <!-- Email list -->
+  <div class="email-list-panel">
+    <div class="email-list-header" id="listHeader">Loading...</div>
+    <div class="email-list" id="emailList">
+      <div class="empty-state"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <!-- Email detail -->
+  <div class="email-detail-panel" id="detailPanel">
+    <div class="empty-state">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="#bbb">
+        <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+      </svg>
+      <span>Select an email to read it</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  let allEmails = [];
+  let activeId = null;
+
+  function buildQuery() {
+    const parts = [];
+    const to = document.getElementById('filterTo').value.trim();
+    const read = document.getElementById('filterRead').value;
+    const subject = document.getElementById('filterSubject').value.trim();
+    if (to) parts.push(`to:${to}`);
+    if (read) parts.push(read);
+    if (subject) parts.push(`subject:${subject}`);
+    return parts.join(' ');
+  }
+
+  async function loadEmails() {
+    const listEl = document.getElementById('emailList');
+    const headerEl = document.getElementById('listHeader');
+    listEl.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+    headerEl.textContent = 'Loading...';
+
+    const q = buildQuery();
+    const max = document.getElementById('maxResults').value;
+    const params = new URLSearchParams({ maxResults: max });
+    if (q) params.set('q', q);
+
+    try {
+      const res = await fetch(`/api/emails?${params}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      allEmails = data.emails;
+      document.getElementById('totalBadge').textContent = `${allEmails.length} emails`;
+      headerEl.textContent = `${allEmails.length} message${allEmails.length !== 1 ? 's' : ''}${q ? ' · filtered' : ''}`;
+      renderList(allEmails);
+    } catch (err) {
+      listEl.innerHTML = `<div class="empty-state" style="color:#c62828">${err.message}</div>`;
+      headerEl.textContent = 'Error';
+    }
+  }
+
+  function renderList(emails) {
+    const listEl = document.getElementById('emailList');
+    if (!emails.length) {
+      listEl.innerHTML = '<div class="empty-state">No emails found</div>';
+      return;
+    }
+    listEl.innerHTML = emails.map(e => `
+      <div class="email-item ${e.isUnread ? 'unread' : ''} ${e.id === activeId ? 'active' : ''}"
+           onclick="openEmail('${e.id}')" id="item-${e.id}">
+        <div class="email-subject">
+          ${e.isUnread ? '<span class="unread-dot"></span>' : ''}
+          ${escHtml(e.subject || '(no subject)')}
+        </div>
+        <div class="email-from">${escHtml(e.from)}</div>
+        <div class="email-meta">
+          <span class="email-to-tag" title="${escHtml(e.to)}">${escHtml(shortTo(e.to))}</span>
+          <span class="email-date">${formatDate(e.date)}</span>
+        </div>
+        <div class="email-snippet">${escHtml(e.snippet)}</div>
+      </div>
+    `).join('');
+  }
+
+  async function openEmail(id) {
+    activeId = id;
+    // Highlight selected
+    document.querySelectorAll('.email-item').forEach(el => el.classList.remove('active'));
+    const item = document.getElementById(`item-${id}`);
+    if (item) item.classList.add('active');
+
+    const panel = document.getElementById('detailPanel');
+    panel.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+
+    try {
+      const res = await fetch(`/api/emails/${id}`);
+      const email = await res.json();
+      if (email.error) throw new Error(email.error);
+
+      // Mark as read in the list locally
+      if (item) item.classList.remove('unread');
+      const dot = item?.querySelector('.unread-dot');
+      if (dot) dot.remove();
+
+      panel.innerHTML = `
+        <div class="email-detail-header">
+          <div class="email-detail-subject">${escHtml(email.subject || '(no subject)')}</div>
+          <div class="email-detail-meta">
+            <span class="label">From</span><span class="value">${escHtml(email.from)}</span>
+            <span class="label">To</span><span class="value">${escHtml(email.to)}</span>
+            <span class="label">Date</span><span class="value">${escHtml(email.date)}</span>
+          </div>
+          <div class="detail-actions">
+            <button onclick="copyLinks('${id}')">Copy all links</button>
+          </div>
+        </div>
+        <iframe class="email-body-frame" id="bodyFrame-${id}" sandbox="allow-same-origin"></iframe>
+      `;
+
+      const iframe = document.getElementById(`bodyFrame-${id}`);
+      iframe.onload = () => {
+        // Write body into iframe for sandboxed rendering
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        doc.open();
+        doc.write(email.body);
+        doc.close();
+        // Auto-resize to content
+        iframe.style.height = (doc.body.scrollHeight + 32) + 'px';
+      };
+      // Trigger load
+      iframe.src = 'about:blank';
+
+      // Store body for link copying
+      iframe._emailBody = email.body;
+
+    } catch (err) {
+      panel.innerHTML = `<div class="empty-state" style="color:#c62828">${err.message}</div>`;
+    }
+  }
+
+  async function copyLinks(id) {
+    const iframe = document.getElementById(`bodyFrame-${id}`);
+    if (!iframe) return;
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    const links = [...doc.querySelectorAll('a[href]')]
+      .map(a => a.href)
+      .filter(Boolean)
+      .join('\n');
+    if (!links) { showToast('No links found in this email'); return; }
+    await navigator.clipboard.writeText(links);
+    showToast('Links copied to clipboard!');
+  }
+
+function clearFilters() {
+    document.getElementById('filterTo').value = '';
+    document.getElementById('filterRead').value = '';
+    document.getElementById('filterSubject').value = '';
+    loadEmails();
+  }
+
+  function shortTo(to) {
+    // Show just the local part for long addresses
+    if (!to) return '';
+    const match = to.match(/([^<\s]+@[^>\s,]+)/);
+    return match ? match[1] : to;
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      if (d.toDateString() === now.toDateString()) {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      }
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    } catch { return dateStr; }
+  }
+
+  function escHtml(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  // Support Enter key in filter inputs
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.closest('.filter-bar')) loadEmails();
+  });
+
+  // Load on start
+  loadEmails();
+</script>
+</body>
+</html>
