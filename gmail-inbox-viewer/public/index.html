@@ -431,17 +431,20 @@
       `;
 
       const iframe = document.getElementById(`bodyFrame-${id}`);
-      iframe.onload = () => {
-        // Write body into iframe for sandboxed rendering
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-        doc.open();
-        doc.write(email.body);
-        doc.close();
-        // Auto-resize to content
-        iframe.style.height = (doc.body.scrollHeight + 32) + 'px';
-      };
-      // Trigger load
-      iframe.src = 'about:blank';
+
+      // Write body directly — avoids onload+about:blank race condition
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(email.body);
+      doc.close();
+
+      // Block all link navigation inside the email body
+      doc.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', e => e.preventDefault());
+      });
+
+      // Auto-resize to content
+      iframe.style.height = (doc.body.scrollHeight + 32) + 'px';
 
       // Store body for link copying
       iframe._emailBody = email.body;
