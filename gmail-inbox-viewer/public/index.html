@@ -427,20 +427,36 @@
             <button onclick="copyLinks('${id}')">Copy all links</button>
           </div>
         </div>
-        <iframe class="email-body-frame" id="bodyFrame-${id}" sandbox="allow-same-origin"></iframe>
+        <iframe class="email-body-frame" id="bodyFrame-${id}" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
       `;
 
       const iframe = document.getElementById(`bodyFrame-${id}`);
 
-      // Write body directly — avoids onload+about:blank race condition
       const doc = iframe.contentDocument || iframe.contentWindow.document;
       doc.open();
       doc.write(email.body);
       doc.close();
 
-      // Block all link navigation inside the email body
-      doc.querySelectorAll('a').forEach(a => {
-        a.addEventListener('click', e => e.preventDefault());
+      // Disable all links except sign-in buttons
+      doc.querySelectorAll('a[href]').forEach(a => {
+        const text = (a.textContent || '').toLowerCase().trim();
+        const isSignIn = text.includes('sign in') || text.includes('signin') || text.includes('log in') || text.includes('login');
+        if (isSignIn) {
+          a.setAttribute('target', '_blank');
+          a.setAttribute('rel', 'noopener noreferrer');
+        } else {
+          a.setAttribute('href', 'javascript:void(0)');
+        }
+      });
+
+      // Open links from parent context so sandbox popup restrictions don't apply
+      doc.addEventListener('click', function(e) {
+        const a = e.target.closest('a');
+        if (!a) return;
+        const href = a.getAttribute('href');
+        if (!href || href.startsWith('javascript:')) return;
+        e.preventDefault();
+        window.open(href, '_blank', 'noopener,noreferrer');
       });
 
       // Auto-resize to content
@@ -457,10 +473,12 @@
   async function copyLinks(id) {
     const iframe = document.getElementById(`bodyFrame-${id}`);
     if (!iframe) return;
-    const doc = iframe.contentDocument || iframe.contentWindow.document;
-    const links = [...doc.querySelectorAll('a[href]')]
-      .map(a => a.href)
-      .filter(Boolean)
+    // Parse original body to get real hrefs (DOM hrefs may be neutralized)
+    const parser = new DOMParser();
+    const bodyDoc = parser.parseFromString(iframe._emailBody || '', 'text/html');
+    const links = [...bodyDoc.querySelectorAll('a[href]')]
+      .map(a => a.getAttribute('href'))
+      .filter(h => h && !h.startsWith('javascript:'))
       .join('\n');
     if (!links) { showToast('No links found in this email'); return; }
     await navigator.clipboard.writeText(links);
